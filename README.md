@@ -32,10 +32,14 @@ shows only agents run by `hc`), and starting the server at login. To be asked th
 ## What you need first
 
 - A Mac.
-- `git`: `xcode-select --install` gives it.
+- `git`: `xcode-select --install` gives it. On a new Mac the installer's first look at `git`
+  may make macOS open its own dialog offering the command line developer tools: press Install
+  there, wait for it to finish, then run the line above again.
 - Claude Code. When it is missing the installer stops and prints Claude Code's own install
   line (`curl -fsSL https://claude.ai/install.sh | bash`, from
-  https://code.claude.com/docs/en/setup). Run the line above again after.
+  https://code.claude.com/docs/en/setup). Run the line above again after: it finds `claude` in
+  `~/.local/bin`, where that installer puts it, and prints the line that puts that folder on
+  your shell's `PATH`.
 - Access to `piratekittens/avatar-server`, and `git` signed in to GitHub (next section).
 
 ## Signing in to the private repository
@@ -121,4 +125,6 @@ See "Removing everything" in `docs/install.md` of the private repository (in you
 - It never changes a checkout that is already there: updating is `bin/update`'s.
 - It never waits on a hidden password prompt: a missing sign-in fails at once, and each clone
   has a time limit.
+- It never asks about GitHub's SSH host key: on the first SSH connection it trusts the key, as
+  you would by answering yes; a key that has changed since is still refused.
 - A download cut short runs nothing: the whole script is one function called on its last line.

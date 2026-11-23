@@ -5,10 +5,13 @@
 #   curl -fsSL https://raw.githubusercontent.com/piratekittens/getavatar/main/install.sh | sh -s -- --dry-run
 #
 # 1. Checks for macOS, git and Claude Code (when Claude Code is missing it stops and prints
-#    Claude Code's own install line).
+#    Claude Code's own install line). claude and mise in ~/.local/bin, where their installers
+#    put them, are found there and used for this run, with the line to add to the shell profile.
 # 2. Installs mise with mise's own installer when it is missing.
 # 3. Clones the private repository piratekittens/avatar-server into ~/code/avatar-server
 #    (AVATAR_SERVER_DIR for another folder): HTTPS, then gh, then SSH. A checkout already there is left as it is.
+#    SSH trusts github.com's host key on first use (StrictHostKeyChecking=accept-new: what the
+#    person would answer at ssh's question); a changed key is still refused.
 # 4. Runs that checkout's bin/install, with yes to Herdr (when hc is missing) and to start at login.
 # 5. Prints the address, how to update and where the docs are.
 # 6. Never uses sudo; writes in your home folder, a temporary folder it removes, and what mise's
@@ -71,14 +74,16 @@ bounded() {
   return $rc
 }
 
-# mise on PATH, or in ~/.local/bin (where its installer puts it), then on PATH for this run
-find_mise() {
-  command -v mise >/dev/null 2>&1 && return 0
-  [ -x "$HOME/.local/bin/mise" ] || return 1
+# find_tool NAME: on PATH, or in ~/.local/bin (where the installers of claude and mise put it), then
+# that folder on PATH for this run (a second tool there is then found on PATH, said once)
+find_tool() {
+  command -v "$1" >/dev/null 2>&1 && return 0
+  [ -x "$HOME/.local/bin/$1" ] || return 1
   PATH="$HOME/.local/bin:$PATH"
   export PATH
-  say "  mise is in ~/.local/bin, which is not on this shell's PATH; this run uses it from there."
-  say "  Add this line to your shell's profile (~/.zshrc) so that a new shell finds it:"
+  say "  $1 is in ~/.local/bin, which is not on this shell's PATH; this run uses it from there."
+  say "  Add this line to your shell's profile (~/.zshrc) so that a new shell, and the server"
+  say "  when you start it by hand, find it:"
   say "    export PATH=\"\$HOME/.local/bin:\$PATH\""
 }
 
@@ -102,7 +107,7 @@ install_mise() {
   say "  run: sh <mise's installer>"
   sh "$tmp" </dev/null || stop "mise's installer failed (its lines are above)"
   rm -f "$tmp"
-  find_mise || stop "mise's installer ran, but mise is not found (not on PATH, not in ~/.local/bin)"
+  find_tool mise || stop "mise's installer ran, but mise is not found (not on PATH, not in ~/.local/bin)"
   say "  mise: installed"
 }
 
@@ -145,8 +150,8 @@ no_access() {
   if grep -Eqi 'repository not found|could not resolve to a repository' "$WORK/all-errors"; then
     say "GitHub knew who you are, but that account cannot see the repository (yet): the likely cause."
   else
-    say "The likely cause: no GitHub sign-in that git could use (a network fault or an unknown"
-    say "SSH host key gives the same; git's lines say which)."
+    say "The likely cause: no GitHub sign-in that git could use (a network fault or a github.com"
+    say "SSH host key that changed gives the same; git's lines say which)."
   fi
   say "The repository $REPO_SLUG is private. To clone it you need two things:"
   say "  1. Access. You were invited: accept the invitation (the invitation email, or"
@@ -180,19 +185,21 @@ main() {
 
   say "1. This Mac, git, Claude Code"
   [ "$(uname -s)" = Darwin ] || stop "this installer is for macOS only"
+  # on a new Mac /usr/bin/git is a placeholder: running it opens macOS's own dialog
   git --version >/dev/null 2>&1 ||
-    stop "git is missing: run  xcode-select --install  (the Xcode command line tools), then run this line again"
-  if ! command -v claude >/dev/null 2>&1; then
-    say "  Claude Code (claude) is not installed. The server watches Claude Code sessions."
+    stop "git is missing. macOS may have just opened a dialog offering the command line developer tools: press Install there (or run  xcode-select --install), wait for it to finish, then run this line again"
+  if ! find_tool claude; then
+    say "  Claude Code (claude) is not installed (not on PATH, not in ~/.local/bin). The server"
+    say "  watches Claude Code sessions."
     say "  Install it with its own installer ($CLAUDE_DOCS):"
     say "    $CLAUDE_LINE"
-    say "  then open a new terminal and run this line again."
+    say "  then run this line again (it finds claude in ~/.local/bin, where that installer puts it)."
     exit 1
   fi
   say "  macOS, git, claude: found"
 
   say "2. mise (it installs the Erlang and Elixir the server is pinned to)"
-  if find_mise; then
+  if find_tool mise; then
     say "  mise: found"
   else
     say "  mise is not installed: installing it with its own installer from $MISE_URL"
@@ -220,7 +227,7 @@ main() {
     elif gh_signed_in && try_clone "gh (signed in): gh repo clone $REPO_SLUG" \
       gh repo clone "$REPO_SLUG" "$DIR" -- --quiet; then
       :
-    elif try_clone "SSH: $REPO_SSH" env GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=20" \
+    elif try_clone "SSH: $REPO_SSH" env GIT_SSH_COMMAND="ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20" \
       git clone --quiet -- "$REPO_SSH" "$DIR"; then
       :
     else
